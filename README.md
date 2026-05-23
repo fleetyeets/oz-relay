@@ -2,6 +2,8 @@
 
 A lightweight web UI for dispatching and monitoring [Warp](https://warp.dev) Oz cloud agents. Type a prompt, dispatch a run, and watch the agent output stream back in real time — from any browser, including mobile.
 
+![oz-relay UI showing a completed run with prompt and streamed output](public/screenshot.png)
+
 ## Requirements
 
 - macOS with [Warp](https://warp.dev) installed and signed in
