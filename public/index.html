@@ -1,0 +1,795 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+  <meta name="mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <meta name="theme-color" content="#1e1f29">
+  <title>oz-relay</title>
+  <style>
+    :root {
+      --bg:       #282a36;
+      --surface:  #1e1f29;
+      --elevated: #44475a;
+      --fg:       #f8f8f2;
+      --comment:  #6272a4;
+      --cyan:     #8be9fd;
+      --green:    #50fa7b;
+      --orange:   #ffb86c;
+      --pink:     #ff79c6;
+      --purple:   #bd93f9;
+      --red:      #ff5555;
+      --yellow:   #f1fa8c;
+    }
+
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    html, body {
+      height: 100%;
+      background: var(--bg);
+      color: var(--fg);
+      font-family: 'SF Mono', 'JetBrains Mono', 'Fira Code', monospace;
+      font-size: 13px;
+      line-height: 1.5;
+    }
+
+    body {
+      display: flex;
+      flex-direction: column;
+      height: 100vh;
+      height: 100dvh; /* accounts for iOS Safari dynamic toolbar */
+      overflow: hidden;
+    }
+
+    /* ── Header ── */
+    header {
+      flex-shrink: 0;
+      background: var(--surface);
+      border-bottom: 1px solid var(--elevated);
+      padding: 9px 16px;
+      display: flex;
+      align-items: center;
+      gap: 12px;
+    }
+
+    .logo { font-weight: 700; color: var(--purple); letter-spacing: -0.02em; }
+    .logo span { color: var(--comment); font-weight: 400; }
+
+    .header-spacer { flex: 1; }
+
+    .conn-badge {
+      font-size: 11px;
+      padding: 2px 8px;
+      border-radius: 10px;
+      border: 1px solid var(--comment);
+      color: var(--comment);
+    }
+    .conn-badge.ok { border-color: var(--green); color: var(--green); }
+
+    /* ── Layout ── */
+    .layout {
+      flex: 1;
+      display: flex;
+      min-height: 0;
+    }
+
+    /* ── Sidebar (run history) ── */
+    .sidebar {
+      width: 220px;
+      flex-shrink: 0;
+      background: var(--surface);
+      border-right: 1px solid var(--elevated);
+      display: flex;
+      flex-direction: column;
+      overflow: hidden;
+    }
+
+    .sidebar-title {
+      font-size: 10px;
+      text-transform: uppercase;
+      letter-spacing: 0.08em;
+      color: var(--comment);
+      padding: 10px 12px 6px;
+      flex-shrink: 0;
+    }
+
+    #run-list {
+      flex: 1;
+      overflow-y: auto;
+      padding: 0 6px 8px;
+    }
+
+    #run-list::-webkit-scrollbar { width: 4px; }
+    #run-list::-webkit-scrollbar-thumb { background: var(--elevated); border-radius: 2px; }
+
+    .run-item {
+      padding: 7px 8px;
+      border-radius: 5px;
+      cursor: pointer;
+      border: 1px solid transparent;
+      margin-bottom: 2px;
+      transition: background 0.1s;
+    }
+
+    .run-item:hover  { background: var(--elevated); }
+    .run-item.active { background: rgba(189,147,249,0.1); border-color: rgba(189,147,249,0.3); }
+
+    .run-item-id {
+      font-size: 10px;
+      color: var(--comment);
+      margin-bottom: 2px;
+      font-variant-numeric: tabular-nums;
+    }
+
+    .run-item-prompt {
+      font-size: 11px;
+      color: var(--fg);
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+
+    .run-item-state {
+      font-size: 10px;
+      margin-top: 3px;
+    }
+
+    /* ── Main panel ── */
+    .main {
+      flex: 1;
+      display: flex;
+      flex-direction: column;
+      min-width: 0;
+      overflow: hidden;
+    }
+
+    /* Output area */
+    #output {
+      flex: 1;
+      overflow-y: auto;
+      padding: 16px 20px;
+    }
+
+    #output::-webkit-scrollbar { width: 5px; }
+    #output::-webkit-scrollbar-thumb { background: var(--elevated); border-radius: 3px; }
+
+    .empty-state {
+      color: var(--comment);
+      text-align: center;
+      padding: 60px 20px;
+      font-size: 12px;
+    }
+
+    .empty-state h2 { font-size: 14px; color: var(--purple); margin-bottom: 8px; }
+
+    /* Run detail view */
+    .run-detail { display: flex; flex-direction: column; gap: 14px; }
+
+    .run-header {
+      display: flex;
+      align-items: flex-start;
+      gap: 10px;
+      flex-wrap: wrap;
+    }
+
+    .run-id-label {
+      font-size: 10px;
+      color: var(--comment);
+      font-variant-numeric: tabular-nums;
+    }
+
+    .state-badge {
+      font-size: 10px;
+      padding: 1px 8px;
+      border-radius: 8px;
+      border: 1px solid;
+    }
+
+    .state-badge.pending    { border-color: var(--comment); color: var(--comment); }
+    .state-badge.queued     { border-color: var(--comment); color: var(--comment); }
+    .state-badge.in_progress { border-color: var(--cyan);   color: var(--cyan); animation: pulse 1.5s infinite; }
+    .state-badge.running    { border-color: var(--cyan);   color: var(--cyan); animation: pulse 1.5s infinite; }
+    .state-badge.succeeded  { border-color: var(--green);  color: var(--green); }
+    .state-badge.failed     { border-color: var(--red);    color: var(--red); }
+    .state-badge.cancelled  { border-color: var(--orange); color: var(--orange); }
+    .state-badge.errored    { border-color: var(--red);    color: var(--red); }
+
+    @keyframes pulse { 0%,100%{opacity:1} 50%{opacity:0.5} }
+
+    .run-prompt {
+      background: var(--elevated);
+      border-radius: 6px;
+      padding: 10px 12px;
+      color: var(--fg);
+      white-space: pre-wrap;
+      word-break: break-word;
+    }
+
+    .run-prompt-label {
+      font-size: 10px;
+      color: var(--comment);
+      text-transform: uppercase;
+      letter-spacing: 0.06em;
+      margin-bottom: 6px;
+    }
+
+    .run-output-wrap {
+      background: var(--surface);
+      border: 1px solid var(--elevated);
+      border-radius: 6px;
+      overflow: hidden;
+    }
+
+    .run-output-header {
+      padding: 6px 12px;
+      border-bottom: 1px solid var(--elevated);
+      font-size: 10px;
+      color: var(--comment);
+      text-transform: uppercase;
+      letter-spacing: 0.06em;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }
+
+    #output-text {
+      padding: 12px;
+      white-space: pre-wrap;
+      word-break: break-word;
+      font-size: 12px;
+      color: var(--fg);
+      min-height: 60px;
+      max-height: 420px;
+      overflow-y: auto;
+    }
+
+    #output-text::-webkit-scrollbar { width: 4px; }
+    #output-text::-webkit-scrollbar-thumb { background: var(--elevated); border-radius: 2px; }
+
+    .artifacts {
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+    }
+
+    .artifact-item {
+      background: rgba(80,250,123,0.08);
+      border: 1px solid rgba(80,250,123,0.2);
+      border-radius: 5px;
+      padding: 7px 10px;
+      font-size: 11px;
+    }
+
+    .artifact-item a { color: var(--cyan); text-decoration: none; }
+    .artifact-item a:hover { text-decoration: underline; }
+
+    /* Cancel button */
+    .cancel-btn {
+      background: none;
+      border: 1px solid var(--red);
+      border-radius: 4px;
+      color: var(--red);
+      cursor: pointer;
+      padding: 2px 8px;
+      font-size: 10px;
+      font-family: inherit;
+    }
+    .cancel-btn:hover { background: rgba(255,85,85,0.1); }
+
+    /* ── Prompt bar ── */
+    .prompt-bar {
+      flex-shrink: 0;
+      background: var(--surface);
+      border-top: 1px solid var(--elevated);
+      padding: 10px 14px;
+      display: flex;
+      flex-direction: column;
+      gap: 7px;
+    }
+
+    .prompt-row {
+      display: flex;
+      gap: 8px;
+      align-items: flex-end;
+    }
+
+    #prompt-input {
+      flex: 1;
+      background: var(--elevated);
+      border: 1px solid transparent;
+      border-radius: 6px;
+      color: var(--fg);
+      padding: 8px 10px;
+      font-family: inherit;
+      font-size: 13px;
+      resize: none;
+      outline: none;
+      min-height: 38px;
+      max-height: 120px;
+      transition: border-color 0.15s;
+    }
+
+    #prompt-input:focus       { border-color: var(--purple); }
+    #prompt-input::placeholder { color: var(--comment); }
+
+    .run-btn {
+      background: rgba(189,147,249,0.15);
+      border: 1px solid var(--purple);
+      border-radius: 6px;
+      color: var(--purple);
+      cursor: pointer;
+      padding: 8px 18px;
+      font-family: inherit;
+      font-size: 13px;
+      font-weight: 600;
+      white-space: nowrap;
+      transition: background 0.15s;
+      align-self: stretch;
+    }
+    .run-btn:hover    { background: rgba(189,147,249,0.25); }
+    .run-btn:disabled { opacity: 0.4; cursor: not-allowed; }
+
+    .prompt-meta {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+    }
+
+    #env-select {
+      background: var(--elevated);
+      border: 1px solid var(--comment);
+      border-radius: 4px;
+      color: var(--fg);
+      padding: 3px 6px;
+      font-family: inherit;
+      font-size: 11px;
+      outline: none;
+    }
+
+    #env-select:focus { border-color: var(--purple); }
+
+    .meta-label {
+      font-size: 10px;
+      color: var(--comment);
+    }
+
+    .shortcut-hint {
+      font-size: 10px;
+      color: var(--comment);
+      margin-left: auto;
+    }
+
+    /* ── Mobile drawer button (hidden on desktop) ── */
+    .menu-btn {
+      display: none;
+      background: none;
+      border: none;
+      color: var(--comment);
+      cursor: pointer;
+      padding: 4px;
+      border-radius: 4px;
+      flex-shrink: 0;
+      align-items: center;
+      justify-content: center;
+      width: 36px;
+      height: 36px;
+    }
+    .menu-btn:hover { color: var(--fg); }
+    .menu-btn svg { display: block; }
+
+    /* ── Sidebar backdrop (mobile only) ── */
+    .sidebar-backdrop {
+      display: none;
+      position: fixed;
+      inset: 0;
+      background: rgba(0,0,0,0.55);
+      z-index: 99;
+    }
+
+    /* ── Mobile styles ── */
+    @media (max-width: 640px) {
+      html, body { font-size: 14px; }
+
+      header { padding: 10px 14px; }
+
+      .menu-btn { display: flex; }
+      .shortcut-hint { display: none; }
+
+      /* Sidebar becomes a fixed drawer */
+      .sidebar {
+        position: fixed;
+        left: 0; top: 0; bottom: 0;
+        z-index: 100;
+        width: min(80vw, 300px);
+        transform: translateX(-100%);
+        transition: transform 0.22s ease;
+        /* safe area on left edge */
+        padding-left: env(safe-area-inset-left, 0px);
+      }
+
+      body.sidebar-open .sidebar     { transform: translateX(0); }
+      body.sidebar-open .sidebar-backdrop { display: block; }
+
+      .run-item { padding: 10px 10px; }
+      .run-item-prompt { font-size: 12px; }
+      .run-item-state  { font-size: 11px; }
+
+      /* Main takes full width */
+      .main { width: 100%; }
+
+      #output { padding: 12px 14px; }
+
+      /* Prompt bar — larger targets, safe area bottom */
+      .prompt-bar {
+        padding: 10px 14px;
+        padding-bottom: max(16px, env(safe-area-inset-bottom, 16px));
+      }
+
+      /* Prevent iOS zoom on input focus — must be >= 16px */
+      #prompt-input {
+        font-size: 16px;
+        min-height: 44px;
+      }
+
+      #env-select {
+        font-size: 14px;
+        padding: 6px 8px;
+        min-height: 36px;
+      }
+
+      .run-btn {
+        min-width: 64px;
+        min-height: 44px;
+        font-size: 14px;
+        padding: 0 16px;
+      }
+
+      /* Output text */
+      #output-text { font-size: 13px; max-height: 60vh; }
+
+      .run-prompt { font-size: 13px; }
+    }
+  </style>
+</head>
+<body>
+
+  <header>
+    <button class="menu-btn" id="menu-btn" aria-label="Toggle run history">
+      <svg width="18" height="18" viewBox="0 0 18 18" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round">
+        <line x1="2" y1="5" x2="16" y2="5"/>
+        <line x1="2" y1="9" x2="16" y2="9"/>
+        <line x1="2" y1="13" x2="16" y2="13"/>
+      </svg>
+    </button>
+    <div class="logo">oz<span>-relay</span></div>
+    <div class="header-spacer"></div>
+    <div class="conn-badge" id="conn-badge">checking...</div>
+  </header>
+
+  <div class="sidebar-backdrop" id="sidebar-backdrop"></div>
+
+  <div class="layout">
+    <!-- Run history sidebar -->
+    <div class="sidebar" id="sidebar">
+      <div class="sidebar-title">Recent Runs</div>
+      <div id="run-list"><div style="padding:8px 12px;color:var(--comment);font-size:11px">loading...</div></div>
+    </div>
+
+    <!-- Main panel -->
+    <div class="main">
+      <div id="output">
+        <div class="empty-state">
+          <h2>oz-relay</h2>
+          <p>Type a prompt below to dispatch a Warp Oz cloud agent.<br>Select a run from the sidebar to inspect its output.</p>
+        </div>
+      </div>
+
+      <!-- Prompt bar -->
+      <div class="prompt-bar">
+        <div class="prompt-meta">
+          <span class="meta-label">env</span>
+          <select id="env-select">
+            <option value="">none (no environment)</option>
+          </select>
+          <span class="shortcut-hint">Cmd+Enter to run</span>
+        </div>
+        <div class="prompt-row">
+          <textarea id="prompt-input" placeholder="Enter a prompt for the Oz cloud agent..." rows="1"></textarea>
+          <button class="run-btn" id="run-btn">Run</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <script>
+  (() => {
+    'use strict';
+
+    // ── State ──────────────────────────────────────────────────────────────────
+    let runs        = [];
+    let activeRunId = null;
+    let activeSSE   = null;
+
+    const STATE_COLORS = {
+      pending:     'var(--comment)',
+      queued:      'var(--comment)',
+      in_progress: 'var(--cyan)',
+      running:     'var(--cyan)',
+      succeeded:   'var(--green)',
+      failed:      'var(--red)',
+      cancelled:   'var(--orange)',
+      errored:     'var(--red)',
+    };
+
+    const TERMINAL = new Set(['succeeded','failed','cancelled','errored','error']);
+
+    // ── DOM ────────────────────────────────────────────────────────────────────
+    const connBadge   = document.getElementById('conn-badge');
+    const runList     = document.getElementById('run-list');
+    const outputEl    = document.getElementById('output');
+    const promptInput = document.getElementById('prompt-input');
+    const runBtn      = document.getElementById('run-btn');
+    const envSelect   = document.getElementById('env-select');
+
+    // ── Utilities ──────────────────────────────────────────────────────────────
+    function escHtml(s) {
+      return String(s ?? '')
+        .replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+    }
+
+    function shortId(id) {
+      return id ? id.slice(0, 8) : '?';
+    }
+
+    function fmtState(state) {
+      return (state ?? 'unknown').replace(/_/g, ' ');
+    }
+
+    function stateColor(state) {
+      return STATE_COLORS[state] ?? 'var(--comment)';
+    }
+
+    // ── Environments ───────────────────────────────────────────────────────────
+    async function loadEnvironments() {
+      try {
+        const envs = await fetch('/api/environments').then(r => r.json());
+        for (const env of (envs ?? [])) {
+          const opt = document.createElement('option');
+          opt.value = env.id ?? env.environment_id ?? '';
+          opt.textContent = env.name ?? opt.value;
+          envSelect.appendChild(opt);
+        }
+      } catch { /* environments optional */ }
+    }
+
+    // ── Connection check ───────────────────────────────────────────────────────
+    async function checkConnection() {
+      try {
+        const res = await fetch('/api/runs');
+        if (res.ok) {
+          connBadge.textContent = 'connected';
+          connBadge.className = 'conn-badge ok';
+          return true;
+        }
+      } catch {}
+      connBadge.textContent = 'error';
+      connBadge.className = 'conn-badge';
+      return false;
+    }
+
+    // ── Run history sidebar ────────────────────────────────────────────────────
+    async function loadRuns() {
+      try {
+        const data = await fetch('/api/runs').then(r => r.json());
+        runs = (data?.runs ?? data ?? []).slice(0, 50);
+        renderSidebar();
+      } catch (e) {
+        runList.innerHTML = `<div style="padding:8px 12px;color:var(--red);font-size:11px">${escHtml(e.message)}</div>`;
+      }
+    }
+
+    function renderSidebar() {
+      if (!runs.length) {
+        runList.innerHTML = '<div style="padding:8px 12px;color:var(--comment);font-size:11px">no runs yet</div>';
+        return;
+      }
+
+      runList.innerHTML = runs.map(r => {
+        const id    = r.run_id ?? r.id ?? '';
+        const state = r.state ?? 'unknown';
+        const prompt = r.prompt ?? r.config?.prompt ?? '(no prompt)';
+        return `
+          <div class="run-item ${activeRunId === id ? 'active' : ''}" data-id="${escHtml(id)}">
+            <div class="run-item-id">${escHtml(shortId(id))}</div>
+            <div class="run-item-prompt">${escHtml(prompt)}</div>
+            <div class="run-item-state" style="color:${stateColor(state)}">${escHtml(fmtState(state))}</div>
+          </div>`;
+      }).join('');
+    }
+
+    runList.addEventListener('click', (e) => {
+      const item = e.target.closest('.run-item');
+      if (!item) return;
+      selectRun(item.dataset.id);
+    });
+
+    // ── Run detail view ────────────────────────────────────────────────────────
+    async function selectRun(runId) {
+      activeRunId = runId;
+      renderSidebar();
+
+      if (activeSSE) { activeSSE.close(); activeSSE = null; }
+
+      // Fetch initial state
+      try {
+        const run = await fetch(`/api/run/${runId}`).then(r => r.json());
+        renderRunDetail(run);
+        if (!TERMINAL.has(run.state)) {
+          startSSE(runId);
+        }
+      } catch (e) {
+        outputEl.innerHTML = `<div style="color:var(--red);padding:20px">${escHtml(e.message)}</div>`;
+      }
+    }
+
+    function renderRunDetail(run) {
+      const id      = run.run_id ?? run.id ?? '?';
+      const state   = run.state ?? 'unknown';
+      const prompt  = run.prompt ?? run.config?.prompt ?? '(no prompt)';
+      const output  = run.output ?? run.result ?? run.message ?? '';
+      const isLive  = !TERMINAL.has(state);
+
+      // Artifacts
+      const artifacts = run.artifacts ?? [];
+      const artHtml = artifacts.length
+        ? `<div class="artifacts">${artifacts.map(a => {
+            const url  = a.url ?? a.value ?? '';
+            const name = a.name ?? a.type ?? url;
+            return `<div class="artifact-item">${url
+              ? `<a href="${escHtml(url)}" target="_blank" rel="noopener">${escHtml(name)}</a>`
+              : escHtml(name)}</div>`;
+          }).join('')}</div>`
+        : '';
+
+      outputEl.innerHTML = `
+        <div class="run-detail">
+          <div class="run-header">
+            <div>
+              <div class="run-id-label">${escHtml(id)}</div>
+            </div>
+            <span class="state-badge ${escHtml(state)}">${escHtml(fmtState(state))}</span>
+            ${isLive ? `<button class="cancel-btn" id="cancel-btn" data-id="${escHtml(id)}">cancel</button>` : ''}
+          </div>
+
+          <div>
+            <div class="run-prompt-label">prompt</div>
+            <div class="run-prompt">${escHtml(prompt)}</div>
+          </div>
+
+          <div class="run-output-wrap">
+            <div class="run-output-header">
+              <span>output</span>
+              ${isLive ? '<span style="color:var(--cyan)">live</span>' : ''}
+            </div>
+            <div id="output-text">${output
+              ? escHtml(output)
+              : `<span style="color:var(--comment)">${isLive ? 'waiting for output...' : 'no output'}</span>`}</div>
+          </div>
+
+          ${artHtml ? `<div><div class="run-prompt-label">artifacts</div>${artHtml}</div>` : ''}
+        </div>`;
+
+      // Cancel handler
+      document.getElementById('cancel-btn')?.addEventListener('click', async (e) => {
+        const rid = e.currentTarget.dataset.id;
+        await fetch(`/api/run/${rid}`, { method: 'DELETE' });
+      });
+
+      // Scroll output to bottom
+      const ot = document.getElementById('output-text');
+      if (ot) ot.scrollTop = ot.scrollHeight;
+    }
+
+    // ── SSE stream ─────────────────────────────────────────────────────────────
+    function startSSE(runId) {
+      if (activeSSE) activeSSE.close();
+      activeSSE = new EventSource(`/api/run/${runId}/events`);
+
+      activeSSE.onmessage = (e) => {
+        try {
+          const run = JSON.parse(e.data);
+          if (activeRunId === (run.run_id ?? run.id)) {
+            renderRunDetail(run);
+          }
+          // Update sidebar entry
+          const idx = runs.findIndex(r => (r.run_id ?? r.id) === (run.run_id ?? run.id));
+          if (idx >= 0) { runs[idx] = run; renderSidebar(); }
+          if (TERMINAL.has(run.state)) { activeSSE.close(); activeSSE = null; }
+        } catch {}
+      };
+
+      activeSSE.onerror = () => { activeSSE?.close(); activeSSE = null; };
+    }
+
+    // ── Dispatch new run ───────────────────────────────────────────────────────
+    async function dispatchRun() {
+      const prompt = promptInput.value.trim();
+      if (!prompt) return;
+
+      runBtn.disabled = true;
+      runBtn.textContent = 'dispatching...';
+
+      try {
+        const body = { prompt };
+        const envId = envSelect.value;
+        if (envId) body.environment_id = envId;
+
+        const result = await fetch('/api/run', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(body),
+        }).then(r => r.json());
+
+        if (result.error) throw new Error(result.error);
+
+        promptInput.value = '';
+        promptInput.style.height = '';
+
+        // Add to top of run list and select it
+        const runId = result.run_id ?? result.id;
+        runs.unshift({ ...result, prompt });
+        renderSidebar();
+        selectRun(runId);
+        startSSE(runId);
+      } catch (e) {
+        outputEl.innerHTML = `<div style="color:var(--red);padding:20px">dispatch failed: ${escHtml(e.message)}</div>`;
+      } finally {
+        runBtn.disabled = false;
+        runBtn.textContent = 'Run';
+      }
+    }
+
+    // ── Textarea auto-resize ───────────────────────────────────────────────────
+    promptInput.addEventListener('input', () => {
+      promptInput.style.height = 'auto';
+      promptInput.style.height = Math.min(promptInput.scrollHeight, 120) + 'px';
+    });
+
+    // ── Keyboard shortcuts ─────────────────────────────────────────────────────
+    promptInput.addEventListener('keydown', (e) => {
+      if ((e.metaKey || e.ctrlKey) && e.key === 'Enter') {
+        e.preventDefault();
+        dispatchRun();
+      }
+    });
+
+    runBtn.addEventListener('click', dispatchRun);
+
+    // ── Mobile drawer ─────────────────────────────────────────────────────────
+    const menuBtn  = document.getElementById('menu-btn');
+    const backdrop = document.getElementById('sidebar-backdrop');
+
+    function openSidebar()  { document.body.classList.add('sidebar-open'); }
+    function closeSidebar() { document.body.classList.remove('sidebar-open'); }
+
+    menuBtn.addEventListener('click', () =>
+      document.body.classList.toggle('sidebar-open')
+    );
+    backdrop.addEventListener('click', closeSidebar);
+
+    // Close drawer when a run is tapped on mobile
+    runList.addEventListener('click', (e) => {
+      if (e.target.closest('.run-item') && window.innerWidth <= 640) closeSidebar();
+    });
+
+    // ── Boot ───────────────────────────────────────────────────────────────────
+    (async () => {
+      await Promise.all([checkConnection(), loadEnvironments(), loadRuns()]);
+    })();
+
+  })();
+  </script>
+</body>
+</html>

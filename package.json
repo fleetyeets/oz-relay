@@ -1,0 +1,14 @@
+{
+  "name": "oz-relay",
+  "version": "1.0.0",
+  "description": "Web frontend relay for dispatching and monitoring Warp Oz cloud agents",
+  "type": "module",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js",
+    "dev": "node --watch server.js"
+  },
+  "dependencies": {
+    "express": "^5.0.1"
+  }
+}
